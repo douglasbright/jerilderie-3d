@@ -1,0 +1,84 @@
+name: Deploy Jerilderie 3D
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build static website
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site/data
+          : > _site/index.html
+          for part in site-src/part-*.b64; do
+            base64 --decode "$part" >> _site/index.html
+          done
+          touch _site/.nojekyll
+
+          BUILDINGS_URL='https://minedbuildings.z5.web.core.windows.net/global-buildings/2026-02-03/global-buildings.geojsonl/RegionName=Australia/quadkey=311221313/part-00053-4feead82-d499-422b-94cb-c036c212127a.c000.csv.gz'
+          curl --fail --location --retry 4 --retry-delay 8 \
+            "$BUILDINGS_URL" \
+            --output _site/data/jerilderie-buildings.csv.gz
+
+          cat > overpass-query.txt <<'QUERY'
+          [out:json][timeout:32];
+          (
+            way["highway"](-35.386,145.690,-35.322,145.773);
+            way["waterway"](-35.386,145.690,-35.322,145.773);
+            way["natural"="water"](-35.386,145.690,-35.322,145.773);
+            way["landuse"~"grass|recreation_ground|cemetery|reservoir"](-35.386,145.690,-35.322,145.773);
+            way["leisure"~"park|pitch|golf_course"](-35.386,145.690,-35.322,145.773);
+            nwr["name"]["amenity"~"school|hospital|clinic|pub|police|post_office|townhall|library|fire_station"](-35.386,145.690,-35.322,145.773);
+            nwr["name"]["tourism"~"museum|attraction|information"](-35.386,145.690,-35.322,145.773);
+          );
+          out center geom;
+          QUERY
+
+          if ! curl --fail --location --retry 3 --retry-delay 8 \
+            --data-urlencode 'data@overpass-query.txt' \
+            'https://overpass-api.de/api/interpreter' \
+            --output _site/data/jerilderie-osm.json; then
+            curl --fail --location --retry 3 --retry-delay 8 \
+              --data-urlencode 'data@overpass-query.txt' \
+              'https://overpass.kumi.systems/api/interpreter' \
+              --output _site/data/jerilderie-osm.json
+          fi
+
+          python -m json.tool _site/data/jerilderie-osm.json > /dev/null
+          test -s _site/index.html
+          test -s _site/data/jerilderie-buildings.csv.gz
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
