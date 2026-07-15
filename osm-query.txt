@@ -1,0 +1,11 @@
+[out:json][timeout:32];
+(
+  way["highway"](-35.386,145.690,-35.322,145.773);
+  way["waterway"](-35.386,145.690,-35.322,145.773);
+  way["natural"="water"](-35.386,145.690,-35.322,145.773);
+  way["landuse"~"grass|recreation_ground|cemetery|reservoir"](-35.386,145.690,-35.322,145.773);
+  way["leisure"~"park|pitch|golf_course"](-35.386,145.690,-35.322,145.773);
+  nwr["name"]["amenity"~"school|hospital|clinic|pub|police|post_office|townhall|library|fire_station"](-35.386,145.690,-35.322,145.773);
+  nwr["name"]["tourism"~"museum|attraction|information"](-35.386,145.690,-35.322,145.773);
+);
+out center geom;
